@@ -1,0 +1,232 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                      String   @id
+  name                    String
+  plan                    String
+  enabled                 Boolean
+  credits                 BigInt   @db.BigInt
+  creditsLastReset        BigInt   @map("credits_last_reset") @db.BigInt
+  createdAt               BigInt   @map("created_at") @db.BigInt
+  updatedAt               BigInt   @map("updated_at") @db.BigInt
+  ipWhitelist             String[] @map("ip_whitelist")
+  maxConcurrentRequests   Int?     @map("max_concurrent_requests")
+  planExpiresAt           BigInt   @map("plan_expires_at") @db.BigInt
+  totalRequests           BigInt   @map("total_requests") @db.BigInt
+  totalTokensUsed         BigInt   @map("total_tokens_used") @db.BigInt
+  totalCreditsUsed        BigInt   @map("total_credits_used") @db.BigInt
+  lastRequestAt           BigInt?  @map("last_request_at") @db.BigInt
+
+  rpVerified              Boolean? @map("rp_verified")
+  rpVerificationDate      BigInt?  @map("rp_verification_date") @db.BigInt
+  rpBonusTokensExpires    BigInt?  @map("rp_bonus_tokens_expires") @db.BigInt
+  rpDiscountUsed          Boolean? @map("rp_discount_used")
+  
+  apiKeys                 ApiKey[]
+  apiRequests             ApiRequest[]
+
+  @@index([name])
+  @@index([plan])
+  @@index([enabled])
+  @@index([planExpiresAt])
+  @@index([lastRequestAt])
+  @@index([credits])
+  @@index([rpVerified])
+  @@map("users")
+}
+
+model ApiKey {
+  id          String  @id
+  name        String
+  encrypted   String
+  salt        String
+  algorithm   String
+  searchHash  String  @map("search_hash")
+  maskedKey   String? @map("masked_key")
+  createdAt   BigInt  @map("created_at") @db.BigInt
+  lastUsedAt  BigInt? @map("last_used_at") @db.BigInt
+  isActive    Boolean @map("is_active")
+  
+  userId      String  @map("user_id")
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([searchHash])
+  @@index([userId])
+  @@index([isActive])
+  @@index([name])
+  @@map("api_keys")
+}
+
+
+model Provider {
+  id                    String   @id
+  createdAt             BigInt   @map("created_at") @db.BigInt
+  updatedAt             BigInt   @map("updated_at") @db.BigInt
+  name                  String   @unique
+  needsSubProviders     Boolean  @map("needs_sub_providers")
+  totalTokenUsage       BigInt   @map("total_token_usage") @db.BigInt
+  avgLatency            Float    @map("avg_latency")
+  errorCount            Int      @map("error_count")
+  successCount          Int      @map("success_count")
+  isActive              Boolean  @map("is_active")
+  lastUsedAt            BigInt   @map("last_used_at") @db.BigInt
+  lastErrorAt           BigInt?  @map("last_error_at") @db.BigInt
+  priority              Int
+  baseUrl               String   @map("base_url")
+  timeout               Int
+  supportedModels       String[] @map("supported_models")
+  features              String[]
+  consecutiveErrors     Int      @map("consecutive_errors")
+  timeoutCount          Int      @map("timeout_count")
+  healthStatus          String   @map("health_status")
+  uptime                Float
+  
+  rateLimits            Json     @map("rate_limits")
+  throughput            Json
+  performance           Json
+  capacity              Json
+  
+  subProviders          SubProvider[]
+  apiRequests           ApiRequest[]
+
+  @@index([isActive])
+  @@index([healthStatus])
+  @@index([priority])
+  @@index([lastUsedAt])
+  @@map("providers")
+}
+
+model SubProvider {
+  id                        String     @id
+  createdAt                 BigInt     @map("created_at") @db.BigInt
+  updatedAt                 BigInt     @map("updated_at") @db.BigInt
+  providerId                String     @map("provider_id")
+  name                      String
+  enabled                   Boolean
+  totalTokenUsage           BigInt     @map("total_token_usage") @db.BigInt
+  modelMapping              Json       @map("model_mapping")
+  lastUsedAt                BigInt     @map("last_used_at") @db.BigInt
+  consecutiveErrors         Int        @map("consecutive_errors")
+  errorCount                Int        @map("error_count")
+  isActive                  Boolean    @map("is_active")
+  lastErrorAt               BigInt?    @map("last_error_at") @db.BigInt
+  lastErrorType             String?    @map("last_error_type")
+  priority                  Int
+  weight                    Float
+  timeout                   Int
+  customHeaders             Json       @map("custom_headers")
+  metadata                  Json
+  avgLatency                Float      @map("avg_latency")
+  healthScore               Float      @map("health_score")
+  circuitBreakerState       String     @map("circuit_breaker_state")
+  lastCircuitBreakerTrigger BigInt?    @map("last_circuit_breaker_trigger") @db.BigInt
+  successCount              Int        @map("success_count")
+  maxRequestsPerMinute      Int        @map("max_requests_per_minute")
+  maxRequestsPerHour        Int        @map("max_requests_per_hour")
+  maxTokensPerMinute        Int        @map("max_tokens_per_minute")
+  maxConcurrentRequests     Int        @map("max_concurrent_requests")
+  
+  apiKey                    Json       @map("api_key")
+  limits                    Json
+  
+  provider                  Provider?  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  apiRequests               ApiRequest[]
+
+  @@index([providerId, enabled])
+  @@index([isActive])
+  @@index([healthScore])
+  @@index([circuitBreakerState])
+  @@index([priority])
+  @@index([lastUsedAt])
+  @@map("sub_providers")
+}
+
+model ApiRequest {
+  id             String   @id
+  createdAt      BigInt   @map("created_at") @db.BigInt
+  updatedAt      BigInt   @map("updated_at") @db.BigInt
+  userId         String?  @map("user_id")
+  endpoint       String
+  model          String
+  tokensUsed     BigInt   @map("tokens_used") @db.BigInt
+  creditsUsed    BigInt   @map("credits_used") @db.BigInt
+  providerId     String?  @map("provider_id")
+  method         String
+  subProviderId  String?  @map("sub_provider_id")
+  userAgent      String?  @map("user_agent")
+  latency        Int
+  responseSize   Int      @map("response_size")
+  requestSize    Int      @map("request_size")
+  status         String
+  statusCode     Int      @map("status_code")
+  errorMessage   String?  @map("error_message")
+  retryCount     Int      @map("retry_count")
+  completedAt    BigInt?  @map("completed_at") @db.BigInt
+  
+  user           User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider       Provider?    @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  subProvider    SubProvider? @relation(fields: [subProviderId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([providerId])
+  @@index([subProviderId])
+  @@index([status])
+  @@index([model])
+  @@index([endpoint])
+  @@index([completedAt])
+  @@map("api_requests")
+}
+
+model VideoJob {
+  id             String  @id
+  createdAt      BigInt  @map("created_at") @db.BigInt
+  updatedAt      BigInt  @map("updated_at") @db.BigInt
+  userId         String? @map("user_id")
+  model          String
+  providerName   String  @map("provider_name")
+  subProviderId  String? @map("sub_provider_id")
+  status         String
+  seconds        String?
+  size           String?
+
+  @@index([userId, createdAt])
+  @@map("video_jobs")
+}
+
+model UserDiscount {
+  id                String  @id
+  userId            String  @map("user_id")
+  modelId           String  @map("model_id")
+  discountMultiplier Float  @map("discount_multiplier")
+  expiresAt         BigInt  @map("expires_at") @db.BigInt
+  createdAt         BigInt  @map("created_at") @db.BigInt
+
+  @@unique([userId, modelId])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("user_discounts")
+}
+
+// OAuth2 Models (for validating access tokens from VoidAI Dashboard)
+
+model OAuthAccessToken {
+  id            String   @id @default(uuid())
+  tokenHash     String   @unique @map("token_hash")
+  clientId      String   @map("client_id")
+  userId        String   @map("user_id")
+  scope         String?
+  expiresAt     BigInt   @map("expires_at") @db.BigInt
+  createdAt     BigInt   @map("created_at") @db.BigInt
+
+  @@index([tokenHash])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("oauth_access_tokens")
+}

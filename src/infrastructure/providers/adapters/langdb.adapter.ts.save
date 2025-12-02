@@ -1,0 +1,453 @@
+import { BaseProviderAdapter, type ProviderConfiguration } from '../base';
+import type {
+  ChatCompletionRequest,
+  ChatCompletionResponse,
+  StreamChunk,
+  SpeechRequest,
+  AudioTranscriptionRequest,
+  TranscriptionResponse,
+  EmbeddingRequest,
+  EmbeddingResponse,
+  ImageGenerationRequest,
+  ImageEditRequest,
+  ImageResponse,
+  ModerationRequest,
+  ModerationResponse,
+  ResponsesRequest,
+  ResponsesResponse,
+  ResponseStreamEvent
+} from '../types';
+import type { ILogger } from '../../../core/logging';
+
+export class LangDBAdapter extends BaseProviderAdapter {
+  private static readonly API_KEY = 'langdb_NWkzYWRmMHJ1ajJiNXRsNWc1ZWlldm1saG4=';
+  private static readonly CHAT_COMPLETIONS_ENDPOINT = '/chat/completions';
+  private static readonly AUDIO_SPEECH_ENDPOINT = '/audio/speech';
+  private static readonly AUDIO_TRANSCRIPTIONS_ENDPOINT = '/audio/transcriptions';
+  private static readonly EMBEDDINGS_ENDPOINT = '/embeddings';
+  private static readonly IMAGES_GENERATIONS_ENDPOINT = '/images/generations';
+  private static readonly IMAGES_EDITS_ENDPOINT = '/images/edits';
+  private static readonly MODERATIONS_ENDPOINT = '/moderations';
+  private static readonly RESPONSES_ENDPOINT = '/responses';
+  private static readonly DEFAULT_IMAGE_MODEL = 'dall-e-3';
+  private static readonly DEFAULT_IMAGE_EDIT_MODEL = 'dall-e-2';
+  private static readonly DEFAULT_MODERATION_MODEL = 'text-moderation-latest';
+
+  constructor(logger: ILogger) {
+    const configuration: ProviderConfiguration = {
+      name: 'langdb',
+      apiKey: LangDBAdapter.API_KEY,
+      baseUrl: 'https://api.us-east-1.langdb.ai/9c7ac2c8-b76f-453b-914d-39eaaccec092/v1',
+      timeout: 300000,
+      rateLimitPerMinute: 240,
+      requiresApiKey: false,
+      supportedModels: [
+        'chatgpt-4o-latest',
+        'gpt-3.5-turbo',
+        'gpt-4o',
+        'gpt-4o-mini',
+        'gpt-4.1',
+        'gpt-4.1-mini',
+        'gpt-4.1-nano',
+        'gpt-4o-mini-search-preview',
+        'gpt-5',
+        'gpt-5-chat',
+        'gpt-5-mini',
+        'gpt-5-nano',
+        'o1',
+        'o3',
+        'o3-mini',
+        'o4-mini',
+        'deepseek-r1',
+        'deepseek-v3',
+        'deepseek-v3.1',
+        'gemini-2.5-pro',
+        'gemini-2.5-flash',
+        'gemini-1.5-flash',
+        'gemini-2.0-flash',
+        'sonar-pro',
+        'sonar',
+        'sonar-reasoning',
+        'sonar-reasoning-pro',
+        'sonar-deep-research',
+        'gpt-oss-20b',
+        'gpt-oss-120b',
+        'kimi-k2-instruct',
+        'claude-3-haiku-20240307',
+        'claude-3-opus-20240229',
+        'claude-3-5-sonnet-20240620',
+        'claude-3-5-haiku-20241022',
+        'claude-3-7-sonnet-20250219',
+        'claude-sonnet-4-20250514',
+        'claude-opus-4-20250514',
+        'claude-opus-4-1-20250805',
+        'claude-sonnet-4-5-20250929',
+      ],
+      modelMapping: {
+        'chatgpt-4o-latest': 'openai/chatgpt-4o-latest',
+        'gpt-3.5-turbo': 'openai/gpt-3.5-turbo',
+        'gpt-4o': 'openai/gpt-4o',
+        'gpt-4o-mini': 'openai/gpt-4o-mini',
+        'gpt-4.1': 'openai/gpt-4.1',
+        'gpt-4.1-mini': 'openai/gpt-4.1-mini',
+        'gpt-4.1-nano': 'openai/gpt-4.1-nano',
+        'gpt-4o-mini-search-preview': 'openai/gpt-4o-mini-search-preview',
+        'gpt-5': 'openai/gpt-5',
+        'gpt-5-chat': 'openai/gpt-5-chat',
+        'gpt-5-mini': 'openai/gpt-5-mini',
+        'gpt-5-nano': 'openai/gpt-5-nano',
+        'o1': 'openai/o1',
+        'o3': 'openai/o3',
+        'o3-mini': 'openai/o3-mini',
+        'o4-mini': 'openai/o4-mini',
+        'deepseek-r1': 'deepseek-r1-0528',
+        'deepseek-v3': 'deepseek-chat-v3-0324',
+        'deepseek-v3.1': 'deepseek-chat-v3.1',
+        'gemini-2.5-pro': 'gemini/gemini-2.5-pro',
+        'gemini-2.5-flash': 'gemini/gemini-2.5-flash',
+        'gemini-1.5-flash': 'openrouter/gemini-flash-1.5', 
+        'gemini-2.0-flash': 'gemini/gemini-2.0-flash',
+        'sonar-pro': 'openrouter/sonar-pro',
+        'sonar': 'openrouter/sonar',
+        'sonar-reasoning': 'openrouter/sonar-reasoning',
+        'sonar-reasoning-pro': 'openrouter/sonar-reasoning-pro',
+        'sonar-deep-research': 'openrouter/sonar-deep-research',
+        'gpt-oss-120b': 'gpt-oss-120b',
+        'gpt-oss-20b': 'gpt-oss-20b',
+        'kimi-k2-instruct': 'kimi-k2',
+        'claude-3-haiku-20240307': 'anthropic/claude-3-haiku-20240307',
+        'claude-3-opus-20240229': 'anthropic/claude-3-opus-20240229',
+        'claude-3-5-sonnet-20240620': 'anthropic/claude-3-5-sonnet-20240620',
+        'claude-3-5-haiku-20241022': 'anthropic/claude-3.5-haiku',
+        'claude-3-7-sonnet-20250219': 'anthropic/claude-3.7-sonnet',
+        'claude-sonnet-4-20250514': 'anthropic/claude-sonnet-4',
+        'claude-opus-4-20250514': 'anthropic/claude-opus-4',
+        'claude-opus-4-1-20250805': 'anthropic/claude-opus-4.1',
+        'claude-sonnet-4-5-20250929': 'anthropic/claude-sonnet-4.5'
+      },
+      capabilities: {
+        chat: true,
+        audio: false,
+        embeddings: false,
+        images: false,
+        videos: false,
+        moderation: false,
+        responses: false
+      }
+    };
+
+    super(configuration, logger);
+  }
+
+  async chatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse | AsyncIterable<StreamChunk>> {
+    const context = this.createRequestContext(LangDBAdapter.CHAT_COMPLETIONS_ENDPOINT, request.model);
+
+    return this.executeWithLogging(context, async () => {
+      const langdbRequest = this.transformRequest(request);
+
+      if (request.stream) {
+        return this.createChatStream(langdbRequest);
+      }
+
+      const response = await this.makeHttpRequest<ChatCompletionResponse>({
+        endpoint: LangDBAdapter.CHAT_COMPLETIONS_ENDPOINT,
+        method: 'POST',
+        body: langdbRequest,
+        expectJson: true
+      });
+
+      return response as ChatCompletionResponse;
+    });
+  }
+
+  async textToSpeech(request: SpeechRequest): Promise<ArrayBuffer> {
+    const context = this.createRequestContext(LangDBAdapter.AUDIO_SPEECH_ENDPOINT, request.model);
+
+    return this.executeWithLogging(context, async () => {
+      const langdbRequest = this.transformRequest(request);
+
+      const response = await this.makeHttpRequest<Response>({
+        endpoint: LangDBAdapter.AUDIO_SPEECH_ENDPOINT,
+        method: 'POST',
+        body: langdbRequest,
+        expectJson: false
+      });
+
+      return (response as Response).arrayBuffer();
+    });
+  }
+
+  async audioTranscription(request: AudioTranscriptionRequest): Promise<TranscriptionResponse> {
+    const context = this.createRequestContext(LangDBAdapter.AUDIO_TRANSCRIPTIONS_ENDPOINT, request.model);
+
+    return this.executeWithLogging(context, async () => {
+      const formData = this.createAudioFormData(request);
+      const headers = this.createHttpHeaders();
+
+      const response = await this.makeStreamRequest({
+        endpoint: LangDBAdapter.AUDIO_TRANSCRIPTIONS_ENDPOINT,
+        method: 'POST',
+        body: formData,
+        headers
+      });
+
+      return response.json() as Promise<TranscriptionResponse>;
+    });
+  }
+
+  async createEmbeddings(request: EmbeddingRequest): Promise<EmbeddingResponse> {
+    const context = this.createRequestContext(LangDBAdapter.EMBEDDINGS_ENDPOINT, request.model);
+
+    return this.executeWithLogging(context, async () => {
+      const langdbRequest = this.transformRequest(request);
+
+      const response = await this.makeHttpRequest<EmbeddingResponse>({
+        endpoint: LangDBAdapter.EMBEDDINGS_ENDPOINT,
+        method: 'POST',
+        body: langdbRequest,
+        expectJson: true
+      });
+
+      return response as EmbeddingResponse;
+    });
+  }
+
+  async generateImages(request: ImageGenerationRequest): Promise<ImageResponse> {
+    const model = request.model || LangDBAdapter.DEFAULT_IMAGE_MODEL;
+    const context = this.createRequestContext(LangDBAdapter.IMAGES_GENERATIONS_ENDPOINT, model);
+
+    return this.executeWithLogging(context, async () => {
+      const langdbRequest = this.transformRequest(request);
+
+      const response = await this.makeHttpRequest<ImageResponse>({
+        endpoint: LangDBAdapter.IMAGES_GENERATIONS_ENDPOINT,
+        method: 'POST',
+        body: langdbRequest,
+        expectJson: true
+      });
+
+      return this.transformImageResponse(response);
+    });
+  }
+
+  async editImages(request: ImageEditRequest): Promise<ImageResponse> {
+    const model = request.model || LangDBAdapter.DEFAULT_IMAGE_EDIT_MODEL;
+    const context = this.createRequestContext(LangDBAdapter.IMAGES_EDITS_ENDPOINT, model);
+
+    return this.executeWithLogging(context, async () => {
+      const formData = this.createImageEditFormData(request);
+      const headers = this.createHttpHeaders();
+
+      const response = await this.makeStreamRequest({
+        endpoint: LangDBAdapter.IMAGES_EDITS_ENDPOINT,
+        method: 'POST',
+        body: formData,
+        headers
+      });
+
+      return response.json() as Promise<ImageResponse>;
+    });
+  }
+
+  async moderateContent(request: ModerationRequest): Promise<ModerationResponse> {
+    const model = request.model || LangDBAdapter.DEFAULT_MODERATION_MODEL;
+    const context = this.createRequestContext(LangDBAdapter.MODERATIONS_ENDPOINT, model);
+
+    return this.executeWithLogging(context, async () => {
+      const langdbRequest = this.transformRequest(request);
+
+      const response = await this.makeHttpRequest<ModerationResponse>({
+        endpoint: LangDBAdapter.MODERATIONS_ENDPOINT,
+        method: 'POST',
+        body: langdbRequest,
+        expectJson: true
+      });
+
+      return response as ModerationResponse;
+    });
+  }
+
+  async createResponse(request: ResponsesRequest): Promise<ResponsesResponse | AsyncIterable<ResponseStreamEvent>> {
+    const context = this.createRequestContext(LangDBAdapter.RESPONSES_ENDPOINT, request.model);
+
+    return this.executeWithLogging(context, async () => {
+      const langdbRequest = this.transformRequest(request);
+
+      if (request.stream) {
+        return this.createResponseStream(langdbRequest);
+      }
+
+      const response = await this.makeHttpRequest<ResponsesResponse>({
+        endpoint: LangDBAdapter.RESPONSES_ENDPOINT,
+        method: 'POST',
+        body: langdbRequest,
+        expectJson: true
+      });
+
+      return response as ResponsesResponse;
+    });
+  }
+
+
+  private transformRequest(request: any): any {
+    const mappedModel = this.getMappedModel(request.model);
+
+    let transformedRequest: any = {
+      ...request,
+      model: mappedModel,
+      drop_params: true
+    };
+
+    // If routing to Anthropic via LangDB, ensure Anthropic's token param is present
+    if (typeof mappedModel === 'string' && mappedModel.startsWith('anthropic/')) {
+      const desiredMax =
+        request.max_output_tokens ??
+        request.max_completion_tokens ??
+        request.max_tokens;
+
+      // LangDB's /chat/completions expects OpenAI schema (max_tokens).
+      if (desiredMax !== undefined) {
+        transformedRequest.max_tokens = desiredMax;
+      }
+
+      // Ensure provider-specific param isn't forwarded
+      if ('max_output_tokens' in transformedRequest) delete transformedRequest.max_output_tokens;
+    }
+
+    return request.model === 'gpt-image-1'
+      ? { ...transformedRequest, moderation: 'low' }
+      : transformedRequest;
+  }
+
+  private async createChatStream(request: ChatCompletionRequest): Promise<AsyncIterable<StreamChunk>> {
+    const response = await this.makeStreamRequest({
+      endpoint: LangDBAdapter.CHAT_COMPLETIONS_ENDPOINT,
+      method: 'POST',
+      body: { ...request, stream: true },
+      headers: {
+        'Accept': 'text/event-stream'
+      }
+    });
+
+    return this.parseSSEStream(response);
+  }
+
+  private async createResponseStream(request: ResponsesRequest): Promise<AsyncIterable<ResponseStreamEvent>> {
+    const response = await this.makeStreamRequest({
+      endpoint: LangDBAdapter.RESPONSES_ENDPOINT,
+      method: 'POST',
+      body: { ...request, stream: true },
+      headers: {
+        'Accept': 'text/event-stream'
+      }
+    });
+
+    return this.parseSSEStream(response);
+  }
+
+  private async *parseSSEStream(response: Response): AsyncIterable<any> {
+    const streamParser = new LangDBStreamParser(response, this.logger);
+
+    for await (const event of streamParser.parseStream()) {
+      yield event;
+    }
+  }
+
+  private createAudioFormData(request: AudioTranscriptionRequest): FormData {
+    const formData = new FormData();
+    formData.append('file', request.file);
+    formData.append('model', this.getMappedModel(request.model));
+
+    if (request.language) formData.append('language', request.language);
+    if (request.prompt) formData.append('prompt', request.prompt);
+    if (request.response_format) formData.append('response_format', request.response_format);
+    if (request.temperature !== undefined) formData.append('temperature', request.temperature.toString());
+
+    return formData;
+  }
+
+  private createImageEditFormData(request: ImageEditRequest): FormData {
+    const formData = new FormData();
+    formData.append('model', this.getMappedModel(request.model));
+    formData.append('prompt', request.prompt);
+
+    const pngBlob = new Blob([request.image], { type: 'image/png' });
+    const imageFile = new File([pngBlob], 'image.png', { type: 'image/png' });
+    formData.append('image', imageFile);
+
+    if (request.mask) formData.append('mask', request.mask);
+    if (request.n) formData.append('n', request.n.toString());
+    if (request.size) formData.append('size', request.size);
+
+    return formData;
+  }
+
+  private transformImageResponse(response: any): ImageResponse {
+    return {
+      created: response.created,
+      data: response.data
+    };
+  }
+}
+
+class LangDBStreamParser {
+  private static readonly SSE_DATA_PREFIX = 'data: ';
+  private static readonly SSE_DONE_MARKER = '[DONE]';
+
+  constructor(
+    private readonly response: Response,
+    private readonly logger: ILogger
+  ) {}
+
+  async *parseStream(): AsyncIterable<any> {
+    const reader = this.getStreamReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const event = this.processStreamLine(line);
+          if (event) yield event;
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  private getStreamReader(): ReadableStreamDefaultReader<Uint8Array> {
+    const reader = this.response.body?.getReader();
+    if (!reader) {
+      throw new Error('No response body available for streaming');
+    }
+    return reader;
+  }
+
+  private processStreamLine(line: string): any | null {
+    if (!line.startsWith(LangDBStreamParser.SSE_DATA_PREFIX)) {
+      return null;
+    }
+
+    const data = line.slice(LangDBStreamParser.SSE_DATA_PREFIX.length);
+    if (data === LangDBStreamParser.SSE_DONE_MARKER) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(data);
+    } catch (error) {
+      this.logger.warn('Failed to parse LangDB SSE data', {
+        metadata: { data, error: (error as Error).message }
+      });
+      return null;
+    }
+  }
+}

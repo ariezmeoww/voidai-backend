@@ -1,0 +1,120 @@
+services:
+  traefik:
+    image: traefik:latest
+    container_name: voidai-traefik
+    command:
+      - --api.dashboard=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entryPoints.web.address=:80
+      - --entryPoints.websecure.address=:443
+      - --certificatesResolvers.le.acme.httpChallenge.entryPoint=web
+      - --certificatesResolvers.le.acme.email=${LETSENCRYPT_EMAIL}
+      - --certificatesResolvers.le.acme.storage=/letsencrypt/acme.json
+      - --entryPoints.web.transport.respondingTimeouts.readTimeout=300s
+      - --entryPoints.web.transport.respondingTimeouts.writeTimeout=300s
+      - --entryPoints.web.transport.respondingTimeouts.idleTimeout=300s
+      - --entryPoints.websecure.transport.respondingTimeouts.readTimeout=300s
+      - --entryPoints.websecure.transport.respondingTimeouts.writeTimeout=300s
+      - --entryPoints.websecure.transport.respondingTimeouts.idleTimeout=300s
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_acme:/letsencrypt
+    networks:
+      - voidai-network
+
+  app:
+    image: voidai-app:latest
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - MASTER_ADMIN_KEY=${MASTER_ADMIN_KEY}
+      - MASTER_ENCRYPTION_KEY=${MASTER_ENCRYPTION_KEY}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - LOGS_DIR=/app/logs
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.voidai.rule=Host(`api.voidai.app`)
+      - traefik.http.routers.voidai.entrypoints=websecure
+      - traefik.http.routers.voidai.tls=true
+      - traefik.http.routers.voidai.tls.certresolver=le
+      - traefik.http.services.voidai.loadbalancer.server.port=8080
+      - traefik.http.routers.voidai.middlewares=secure-headers@docker
+      - traefik.http.routers.voidai.priority=10
+      - traefik.http.routers.voidai-health.rule=Host(`api.voidai.app`) && Path(`/health`)
+      - traefik.http.routers.voidai-health.entrypoints=web
+      - traefik.http.routers.voidai-health.service=voidai
+      - traefik.http.middlewares.secure-headers.headers.stsSeconds=31536000
+      - traefik.http.middlewares.secure-headers.headers.stsIncludeSubdomains=true
+      - traefik.http.middlewares.secure-headers.headers.stsPreload=true
+      - traefik.http.middlewares.secure-headers.headers.frameDeny=true
+      - traefik.http.middlewares.secure-headers.headers.browserXSSFilter=true
+      - traefik.http.middlewares.secure-headers.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.secure-headers.headers.referrerPolicy=strict-origin-when-cross-origin
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - voidai-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: voidai-postgres
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 1s
+      retries: 5
+      start_period: 30s
+    networks:
+      - voidai-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: voidai-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 1s
+      retries: 5
+      start_period: 10s
+    networks:
+      - voidai-network
+
+volumes:
+  postgres_data:
+    driver: local
+  traefik_acme:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  voidai-network:
+    driver: bridge

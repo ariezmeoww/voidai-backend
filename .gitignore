@@ -1,0 +1,70 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files
+.env
+.env.development
+.env.production
+.env.*.local
+
+# Build output
+dist/
+build/
+.cache/
+.parcel-cache/
+.rollup.cache/
+
+# Cloudflare
+.wrangler/
+.dev.vars
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+
+# Logs
+logs/
+*.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+.mf/
+migrations/
+
+# Secrets
+*.key
+*.pem
+*.cert
+*.crt
+
+# OS files
+Thumbs.db
+
+# the damn dashboard
+voidai-dashboard/
+
+# Scripts
+scripts/
+tests/
+test.py
+requirements.txt
+test2.py
+video.mp4
